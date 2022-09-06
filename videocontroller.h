@@ -2,6 +2,8 @@
 #define VIDEOCONTROLLER_H
 
 #include "threadsafevector.h"
+#include "videodecoder.h"
+#include "videoparameters.h"
 #include <QApplication>
 #include <QByteArray>
 #include <QDebug>
@@ -58,80 +60,31 @@ private:
     void streamComponentOpen(int idx);
     void synchronize_video(AVFrame* frame, double* pts);
 
-    void decode(AVPacket* pkt);
-
 public slots:
     void setPlay(bool play);
     void setVideoParameters(WId widgetId /*const IModem::VideoData& videoData*/);
 
 private:
-    // SDL parameters
-    SDL_Window*        screen { nullptr };
-    WId                widgetId { 0 };
-    SDL_Renderer*      renderer { nullptr };
-    SDL_Texture*       texture { nullptr };
-    struct SwsContext* imageConvertCtx { nullptr };
-
-    bool   pictureReady { false };
-    double picturePts { 0 };
-
-    ThreadSafeVector<AVPacket*> videoPacketQueue;
-    ThreadSafeVector<AVPacket*> audioPacketQueue;
-
-    QByteArray audioArr;
-    QMutex*    audioMutex;
-
-    // ffmpeg parameters
-    AVFormatContext* formatCtx { nullptr };
-    //    std::string      path { "udp://127.0.0.1:7777" };
-    //    std::string path { "D://work/_video/video.mp4" };
-    //    std::string path { "D://work/_video/song.mp3" };
-    std::string path { "rtsp://192.168.0.124:554/stream0" };
-
-    double                                     maxFrameDuration { 0.0 };
-    int                                        videoIdx { -1 };
-    int                                        audioIdx { -1 };
-    std::pair<AVCodecContext*, const AVCodec*> videoCodecParams { nullptr, nullptr };
-    std::pair<AVCodecContext*, const AVCodec*> audioCodecParams { nullptr, nullptr };
-    std::pair<double, double>                  clocks { 0, 0 }; // video/audio clock
-
-    SDL_AudioSpec      wanted_spec;
-    AVChannelLayout    chLayout;
-    struct SwrContext* swr_ctx { nullptr };
-
+    VideoParameters* videoParameters { nullptr };
+    VideoDecoder*    videoDecoder { nullptr };
     // threads
     QThread* recvThread { nullptr };
-    QThread* videoDecodeThread { nullptr };
+    QThread* videoDecoderThread { nullptr };
 
     ////////
 
     QThread* handlerThread { nullptr };
 
     // ffmpeg
-    //    AVFormatContext* pFormatCtx { nullptr };
-    //    int              i, videoindex;
-    //    AVCodecContext*  pCodecCtx { nullptr };
-    //    AVCodec*         pCodec { nullptr };
-    //    AVFrame *        pFrame { nullptr }, *pFrameYUV { nullptr };
-    AVFrame*       pFrameYUV { nullptr };
-    unsigned char* out_buffer { nullptr };
-    //    AVPacket*          packet { nullptr };
-    //    int y_size;
-    //    int ret, got_picture;
-    //    struct SwsContext* img_convert_ctx { nullptr };
+    //    AVFrame*       pFrameYUV { nullptr };
+    //    unsigned char* out_buffer { nullptr };
 
-    char filepath[21] = "udp://127.0.0.1:7777";
-    // SDL
-    //    int screen_w = 0, screen_h = 0;
+    //    SDL_Rect sdlRect;
 
-    SDL_Rect sdlRect;
+    //    SDL_Rect presentRect { 0, 0, 0, 0 };
 
-    SDL_Rect presentRect { 0, 0, 0, 0 };
-
-    //    QThread* videoThread { nullptr };
-
-    QVector<AVPacket> packetVector;
-    QMutex            packetMutex;
+    //    QVector<AVPacket> packetVector;
+    //    QMutex            packetMutex;
 };
 
 #endif // VIDEOCONTROLLER_H

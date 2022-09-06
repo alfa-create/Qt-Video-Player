@@ -13,15 +13,20 @@ extern "C" {
 #include <libavutil/avutil.h>
 }
 
+#include "videoparameters.h"
+#include <QDebug>
 #include <QObject>
 
 class VideoDecoder : public QObject {
     Q_OBJECT
 public:
-    explicit VideoDecoder(QObject* parent = nullptr);
+    explicit VideoDecoder(VideoParameters* videoParameters, QObject* parent = nullptr);
 
 public slots:
-    //    void decode
+    void decode(AVPacket* pkt);
+
+private:
+    VideoParameters* videoParameters { nullptr };
 
 signals:
 };
