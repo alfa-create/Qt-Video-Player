@@ -84,8 +84,9 @@ private:
     // ffmpeg parameters
     AVFormatContext* formatCtx { nullptr };
     //    std::string      path { "udp://127.0.0.1:7777" };
-    std::string path { "D://work/_video/video.mp4" };
+    //    std::string path { "D://work/_video/video.mp4" };
     //    std::string path { "D://work/_video/song.mp3" };
+    std::string path { "rtsp://192.168.0.124:554/stream0" };
 
     double                                     maxFrameDuration { 0.0 };
     int                                        videoIdx { -1 };

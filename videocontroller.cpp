@@ -87,8 +87,8 @@ void VideoController::initSdl()
     /* from ffplay src
      * Try to work around an occasional ALSA buffer underflow issue when the
      * period size is NPOT due to ALSA resampling by forcing the buffer size. */
-    //    if (!SDL_getenv("SDL_AUDIO_ALSA_SET_BUFFER_SIZE"))
-    //        SDL_setenv("SDL_AUDIO_ALSA_SET_BUFFER_SIZE", "1", 1);
+    if (!SDL_getenv("SDL_AUDIO_ALSA_SET_BUFFER_SIZE"))
+        SDL_setenv("SDL_AUDIO_ALSA_SET_BUFFER_SIZE", "1", 1);
 
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER);
 
@@ -376,7 +376,7 @@ void VideoController::decode(AVPacket* pkt)
                 if (swr_ctx)
                     swr_free(&swr_ctx);
 
-                swr_alloc_set_opts2(&swr_ctx,
+                auto err = swr_alloc_set_opts2(&swr_ctx,
                     &chLayout,
                     AV_SAMPLE_FMT_S16,
                     wanted_spec.freq,
@@ -395,42 +395,41 @@ void VideoController::decode(AVPacket* pkt)
             }
 
             // refactor
-            const uint8_t** in = (const uint8_t**)frame->extended_data;
+            if (swr_ctx) {
+                const uint8_t** in = (const uint8_t**)frame->extended_data;
 
-            int out_count = (int64_t)frame->nb_samples * wanted_spec.freq / frame->sample_rate + 256;
-            int out_size  = av_samples_get_buffer_size(NULL, chLayout.nb_channels, out_count, AV_SAMPLE_FMT_S16, 0);
-            int len2;
-            if (out_size < 0) {
-                qDebug() << "error 1";
+                int out_count = (int64_t)frame->nb_samples * wanted_spec.freq / frame->sample_rate + 256;
+                int out_size  = av_samples_get_buffer_size(NULL, chLayout.nb_channels, out_count, AV_SAMPLE_FMT_S16, 0);
+                int len2;
+                if (out_size < 0) {
+                    qDebug() << "error 1";
+                }
+                uint8_t* out = new uint8_t[out_size];
+                len2         = swr_convert(swr_ctx, &out, out_count, in, frame->nb_samples);
+                if (len2 < 0) {
+                    qDebug() << "error 2";
+                }
+                if (len2 == out_count) {
+                    qDebug() << "error 3";
+                    //                av_log(NULL, AV_LOG_WARNING, "audio buffer is probably too small\n");
+                    //                if (swr_init(is->swr_ctx) < 0)
+                    //                    swr_free(&is->swr_ctx);
+                }
+                auto size = len2 * chLayout.nb_channels * av_get_bytes_per_sample(AV_SAMPLE_FMT_S16);
+
+                audioMutex->lock();
+
+                //            audioArr.append((char*)frame->data[0], dataSize);
+                audioArr.append((char*)out, size);
+                delete[] out;
+
+                audioMutex->unlock();
+            } else {
+                audioMutex->lock();
+                audioArr.append((char*)frame->data[0], dataSize);
+
+                audioMutex->unlock();
             }
-            uint8_t* out = new uint8_t[out_size];
-
-            //            if (wanted_nb_samples != af->frame->nb_samples) {
-            //                if (swr_set_compensation(is->swr_ctx, (wanted_nb_samples - af->frame->nb_samples) * is->audio_tgt.freq / af->frame->sample_rate,
-            //                                         wanted_nb_samples * is->audio_tgt.freq / af->frame->sample_rate) < 0) {
-            //                    av_log(NULL, AV_LOG_ERROR, "swr_set_compensation() failed\n");
-            //                    return -1;
-            //                }
-            //            }
-
-            len2 = swr_convert(swr_ctx, &out, out_count, in, frame->nb_samples);
-            if (len2 < 0) {
-                qDebug() << "error 2";
-            }
-            if (len2 == out_count) {
-                qDebug() << "error 3";
-                //                av_log(NULL, AV_LOG_WARNING, "audio buffer is probably too small\n");
-                //                if (swr_init(is->swr_ctx) < 0)
-                //                    swr_free(&is->swr_ctx);
-            }
-            auto size = len2 * chLayout.nb_channels * av_get_bytes_per_sample(AV_SAMPLE_FMT_S16);
-
-            audioMutex->lock();
-
-            //            audioArr.append((char*)frame->data[0], dataSize);
-            audioArr.append((char*)out, size);
-
-            audioMutex->unlock();
             av_frame_unref(frame);
         }
         av_packet_unref(pkt);
@@ -438,57 +437,57 @@ void VideoController::decode(AVPacket* pkt)
         //        }
 
     } else if (pkt->stream_index == videoIdx) {
-        //        auto ret = avcodec_send_packet(videoCodecParams.first, pkt);
-        //        if (ret < 0)
-        //            qDebug() << "Decode Error 1";
+        auto ret = avcodec_send_packet(videoCodecParams.first, pkt);
+        if (ret < 0)
+            qDebug() << "Decode Error 1";
 
-        //        auto frame = av_frame_alloc();
-        //        ret        = avcodec_receive_frame(videoCodecParams.first, frame);
-        //        if (ret < 0) {
-        //            qDebug() << "Decode Error 2";
-        //            return;
-        //        }
+        auto frame = av_frame_alloc();
+        ret        = avcodec_receive_frame(videoCodecParams.first, frame);
+        if (ret < 0) {
+            qDebug() << "Decode Error 2";
+            return;
+        }
 
-        //        //    if (ret >= 0)
-        //        //        emit
+        //    if (ret >= 0)
+        //        emit
 
-        //        qDebug() << frame->pts << av_q2d(frame->time_base) << frame->pts << av_q2d(videoCodecParams.first->framerate);
-        //        qDebug() << av_q2d(videoCodecParams.first->time_base) << av_q2d(videoCodecParams.first->pkt_timebase);
-        //        qDebug() << frame->pkt_dts << frame->pkt_duration << frame->best_effort_timestamp;
-        //        auto stream = formatCtx->streams[videoIdx];
-        //        qDebug() << av_q2d(stream->avg_frame_rate) << av_q2d(stream->r_frame_rate) << av_q2d(stream->time_base) << stream->duration;
+        qDebug() << frame->pts << av_q2d(frame->time_base) << frame->pts << av_q2d(videoCodecParams.first->framerate);
+        qDebug() << av_q2d(videoCodecParams.first->time_base) << av_q2d(videoCodecParams.first->pkt_timebase);
+        qDebug() << frame->pkt_dts << frame->pkt_duration << frame->best_effort_timestamp;
+        auto stream = formatCtx->streams[videoIdx];
+        qDebug() << av_q2d(stream->avg_frame_rate) << av_q2d(stream->r_frame_rate) << av_q2d(stream->time_base) << stream->duration;
 
-        //        double pts = frame->pkt_dts;
-        //        if (pts == AV_NOPTS_VALUE)
-        //            pts = frame->pkt_dts;
-        //        if (pts == AV_NOPTS_VALUE)
-        //            pts = 0;
-        //        pts *= av_q2d(formatCtx->streams[videoIdx]->time_base);
-        //        synchronize_video(frame, &pts);
+        double pts = frame->pkt_dts;
+        if (pts == AV_NOPTS_VALUE)
+            pts = frame->pkt_dts;
+        if (pts == AV_NOPTS_VALUE)
+            pts = 0;
+        pts *= av_q2d(formatCtx->streams[videoIdx]->time_base);
+        synchronize_video(frame, &pts);
 
-        //        qDebug() << clocks.first;
+        qDebug() << clocks.first;
 
-        //        while (pictureReady)
-        //            ;
-        //        picturePts = pts;
+        while (pictureReady)
+            ;
+        picturePts = pts;
 
-        //        out_buffer = (unsigned char*)av_malloc(av_image_get_buffer_size(AV_PIX_FMT_YUV420P, videoCodecParams.first->width, videoCodecParams.first->height, 1));
-        //        av_image_fill_arrays(pFrameYUV->data, pFrameYUV->linesize, out_buffer,
-        //            AV_PIX_FMT_YUV420P, videoCodecParams.first->width, videoCodecParams.first->height, 1);
+        out_buffer = (unsigned char*)av_malloc(av_image_get_buffer_size(AV_PIX_FMT_YUV420P, videoCodecParams.first->width, videoCodecParams.first->height, 1));
+        av_image_fill_arrays(pFrameYUV->data, pFrameYUV->linesize, out_buffer,
+            AV_PIX_FMT_YUV420P, videoCodecParams.first->width, videoCodecParams.first->height, 1);
 
-        //        sws_scale(imageConvertCtx, (const unsigned char* const*)frame->data, frame->linesize, 0, videoCodecParams.first->height,
-        //            pFrameYUV->data, pFrameYUV->linesize);
+        sws_scale(imageConvertCtx, (const unsigned char* const*)frame->data, frame->linesize, 0, videoCodecParams.first->height,
+            pFrameYUV->data, pFrameYUV->linesize);
 
-        //        SDL_UpdateYUVTexture(texture, &sdlRect,
-        //            pFrameYUV->data[0], pFrameYUV->linesize[0],
-        //            pFrameYUV->data[1], pFrameYUV->linesize[1],
-        //            pFrameYUV->data[2], pFrameYUV->linesize[2]);
+        SDL_UpdateYUVTexture(texture, &sdlRect,
+            pFrameYUV->data[0], pFrameYUV->linesize[0],
+            pFrameYUV->data[1], pFrameYUV->linesize[1],
+            pFrameYUV->data[2], pFrameYUV->linesize[2]);
 
-        //        SDL_RenderClear(renderer);
-        //        //                SDL_RenderCopy(renderer, texture, NULL, &presentRect);
-        //        SDL_RenderCopy(renderer, texture, NULL, &sdlRect);
+        SDL_RenderClear(renderer);
+        //                SDL_RenderCopy(renderer, texture, NULL, &presentRect);
+        SDL_RenderCopy(renderer, texture, NULL, &sdlRect);
 
-        //        SDL_RenderPresent(renderer);
+        SDL_RenderPresent(renderer);
 
         av_packet_unref(pkt);
     }
