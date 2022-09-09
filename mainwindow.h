@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <ui/videoui.h>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {

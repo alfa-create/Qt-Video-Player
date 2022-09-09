@@ -1,269 +1,276 @@
-﻿#include "videocontroller.h"
-#include "libswresample/swresample.h"
+#include "videocontroller.h"
 
-VideoController::VideoController(
-    //    IDataHandler*      dataHandler,
-    //    IModem::IListener* listener,
-    QObject* parent)
-    : QObject(parent)
-    , videoParameters(new VideoParameters)
-//    , audioMutex(new QMutex)
-//    , IController("VideoController",
-//          { /*ICommand(MType::common, command::common::uplink::FIRMWARE_K)*/ },
-//          dataHandler, listener)
+VideoController::VideoController(QObject* parent)
+    : QObject { parent }
 {
-    try {
-        // ffmpeg init
-        avdevice_register_all();
-        avformat_network_init();
-
-        //        connect(this, &VideoController::packetReceived, this, &VideoController::decode, Qt::QueuedConnection);
-
-    } catch (const std::runtime_error& err) {
-        auto str = err.what();
-        qDebug() << str;
-    }
+    avdevice_register_all();
+    avformat_network_init();
 }
 
-void audio_callback(void* userdata, Uint8* stream, int len)
+void VideoController::setVideoParameters(QWidget* videoWidget)
 {
-    /*
-     * callback from sdl audio
-     * need write len bytes on stream
-     * read size (min(len, data.size)) into stream
-     * if data.size < len remaining bytes is silent(0)
-    */
-    auto pair = reinterpret_cast<std::pair<QByteArray*, QMutex*>*>(userdata);
-    memset(stream, '0', len);
+    if (!window)
+        initSDL(videoWidget->winId());
 
-    pair->second->lock();
+    if (is) {
+        is->height = videoWidget->height();
+        is->width  = videoWidget->width();
+    }
 
-    auto audioSize = std::min(len, pair->first->size());
-    //    memcpy(stream, pair->first->data(), audioSize);
-    SDL_MixAudioFormat(stream, reinterpret_cast<uint8_t*>(pair->first->data()), AUDIO_S16SYS, audioSize, SDL_MIX_MAXVOLUME);
-    pair->first->remove(0, audioSize);
-
-    pair->second->unlock();
+    // TODO: present rectangle
 }
-
-void VideoController::initSdl()
-{
-    /* from ffplay src
-     * Try to work around an occasional ALSA buffer underflow issue when the
-     * period size is NPOT due to ALSA resampling by forcing the buffer size. */
-    if (!SDL_getenv("SDL_AUDIO_ALSA_SET_BUFFER_SIZE"))
-        SDL_setenv("SDL_AUDIO_ALSA_SET_BUFFER_SIZE", "1", 1);
-
-    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER);
-
-    videoParameters->screen = SDL_CreateWindowFrom((void*)videoParameters->widgetId);
-    if (!videoParameters->screen) {
-        throw std::runtime_error("SDL: could not create window\n");
-    }
-    SDL_ShowWindow(videoParameters->screen);
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
-
-    videoParameters->renderer = SDL_CreateRenderer(videoParameters->screen, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!videoParameters->renderer) {
-        qDebug() << "failed initialize hardware accelerated renderer";
-        videoParameters->renderer = SDL_CreateRenderer(videoParameters->screen, -1, NULL);
-    }
-    if (!videoParameters->renderer)
-        throw std::runtime_error("SDL: could not create renderer\n");
-
-    //    texture = SDL_CreateTexture(renderer, )
-    videoParameters->pFrameYUV = av_frame_alloc();
-}
-
-void VideoController::streamOpen()
-{
-    videoParameters->formatCtx = avformat_alloc_context();
-    if (!videoParameters->formatCtx)
-        throw std::runtime_error("FFMPEG: could not create avformat_alloc_context\n");
-
-    //    formatCtx->interrupt_callback.callback
-
-    if (avformat_open_input(&videoParameters->formatCtx, videoParameters->path.data(), NULL, NULL) < 0)
-        throw std::runtime_error("FFMPEG: Couldn't open input stream");
-
-    av_format_inject_global_side_data(videoParameters->formatCtx);
-
-    if (avformat_find_stream_info(videoParameters->formatCtx, NULL) < 0)
-        throw std::runtime_error("FFMPEG: Couldn't find stream information");
-
-    if (videoParameters->formatCtx->pb)
-        videoParameters->formatCtx->pb->eof_reached = 0;
-
-    //    maxFrameDuration = (formatCtx->iformat->flags & AVFMT_TS_DISCONT) ? 10.0 : 3600.0;
-
-    for (uint32_t i { 0 }; i < videoParameters->formatCtx->nb_streams; i++) {
-        videoParameters->formatCtx->streams[i]->discard = AVDISCARD_ALL;
-        switch (videoParameters->formatCtx->streams[i]->codecpar->codec_type) {
-        case AVMEDIA_TYPE_VIDEO:
-            videoParameters->videoIdx = i;
-            break;
-        case AVMEDIA_TYPE_AUDIO:
-            videoParameters->audioIdx = i;
-            break;
-        default:
-            break;
-        }
-    }
-
-    if (videoParameters->videoIdx == -1)
-        qDebug() << "Couldn't find video stream";
-    else
-        streamComponentOpen(videoParameters->videoIdx);
-
-    if (videoParameters->audioIdx == -1)
-        qDebug() << "Couldn't find audio stream";
-    else
-        streamComponentOpen(videoParameters->audioIdx);
-
-    //     here size ?
-    if (videoParameters->videoIdx != -1) {
-        videoParameters->imageConvertCtx = sws_getContext(
-            videoParameters->videoCodecParams.first->width,
-            videoParameters->videoCodecParams.first->height,
-            videoParameters->videoCodecParams.first->pix_fmt,
-            videoParameters->videoCodecParams.first->width,
-            videoParameters->videoCodecParams.first->height,
-            AV_PIX_FMT_YUV420P,
-            SWS_BICUBIC, NULL, NULL, NULL);
-        videoParameters->texture = SDL_CreateTexture(
-            videoParameters->renderer,
-            SDL_PIXELFORMAT_IYUV,
-            SDL_TEXTUREACCESS_STREAMING,
-            videoParameters->videoCodecParams.first->width,
-            videoParameters->videoCodecParams.first->height);
-
-        videoParameters->sdlRect.x = 0;
-        videoParameters->sdlRect.y = 0;
-        videoParameters->sdlRect.w = videoParameters->videoCodecParams.first->width;
-        videoParameters->sdlRect.h = videoParameters->videoCodecParams.first->height;
-    }
-
-    //start receive thread
-    recvThread = QThread::create([&] {
-        while (true) {
-            auto pkt = av_packet_alloc();
-            if (av_read_frame(videoParameters->formatCtx, pkt) >= 0) {
-                emit packetReceived(pkt);
-                //                videoPacketQueue.pus hBack(pkt);
-            } else
-                av_packet_unref(pkt);
-        }
-    });
-    connect(this->thread(), &QThread::finished, recvThread, &QThread::deleteLater);
-    recvThread->start(QThread::HighestPriority);
-
-    videoDecoder       = new VideoDecoder(videoParameters, nullptr);
-    videoDecoderThread = new QThread();
-
-    // TODO: connect
-    connect(this, &VideoController::packetReceived, videoDecoder, &VideoDecoder::decode, Qt::QueuedConnection);
-    videoDecoder->moveToThread(videoDecoderThread);
-    videoDecoderThread->start(QThread::HighestPriority);
-}
-
-void VideoController::streamComponentOpen(int idx)
-{
-    auto codecCtx = avcodec_alloc_context3(NULL);
-    if (!codecCtx)
-        throw std::runtime_error("FFMPEG: Couldn't not avcodec_alloc_context3");
-
-    if (avcodec_parameters_to_context(codecCtx, videoParameters->formatCtx->streams[idx]->codecpar) < 0)
-        throw std::runtime_error("FFMPEG: Couldn't not avcodec_parameters_to_context");
-
-    codecCtx->pkt_timebase = videoParameters->formatCtx->streams[idx]->time_base;
-    auto codec             = avcodec_find_decoder(codecCtx->codec_id);
-
-    if (avcodec_open2(codecCtx, codec, NULL) < 0)
-        throw std::runtime_error("FFMPEG: Couldn't not avcodec_open2");
-
-    // ?
-    codecCtx->codec_id = codec->id;
-
-    videoParameters->formatCtx->streams[idx]->discard = AVDISCARD_DEFAULT;
-
-    // TODO create decode thread
-    switch (codecCtx->codec_type) {
-    case AVMEDIA_TYPE_AUDIO: {
-        //        codecCtx->request_sample_fmt = AV_SAMPLE_FMT_S16;
-        SDL_AudioSpec spec;
-
-        //        auto            sampleRate = codecCtx->sample_rate;
-        if (av_channel_layout_copy(&videoParameters->chLayout, &codecCtx->ch_layout) < 0)
-            throw std::runtime_error("FFMPEG: Couldn't not av_channel_layout_copy");
-
-        videoParameters->wanted_spec.freq     = codecCtx->sample_rate;
-        videoParameters->wanted_spec.format   = AUDIO_S16SYS;
-        videoParameters->wanted_spec.channels = videoParameters->chLayout.nb_channels;
-        videoParameters->wanted_spec.silence  = 0;
-        videoParameters->wanted_spec.samples  = 1024;
-        videoParameters->wanted_spec.callback = audio_callback;
-
-        auto pair                             = new std::pair<QByteArray*, QMutex*>(&videoParameters->audioArr, videoParameters->audioMutex);
-        videoParameters->wanted_spec.userdata = (void*)pair;
-
-        if (SDL_OpenAudio(&videoParameters->wanted_spec, &spec) < 0)
-            throw std::runtime_error("SDL: Couldn't not SDL_OpenAudio");
-
-        av_channel_layout_default(&videoParameters->chLayout, videoParameters->wanted_spec.channels);
-
-        SDL_PauseAudio(0);
-
-        videoParameters->audioCodecParams.first  = codecCtx;
-        videoParameters->audioCodecParams.second = codec;
-        //        av_channel_layout_uninit(&chLayout);
-        break;
-    }
-    case AVMEDIA_TYPE_VIDEO:
-        videoParameters->videoCodecParams.first  = codecCtx;
-        videoParameters->videoCodecParams.second = codec;
-
-        break;
-
-    default:
-        break;
-    }
-}
-
-void VideoController::synchronize_video(AVFrame* frame, double* pts)
-{
-    //    if (*pts != 0)
-    //        clocks.first = *pts;
-    //    else
-    //        *pts = clocks.first;
-
-    //    double frameDelay = av_q2d(videoCodecParams.first->time_base);
-    //    frameDelay += frame->repeat_pict * (frameDelay * 0.5);
-    //    clocks.first += frameDelay;
-}
-
-//void VideoController::handle(const ICommand* /*command*/, const QByteArray& /*body*/)
-//{
-//}
 
 void VideoController::setPlay(bool play)
 {
     qDebug() << av_version_info();
 
-    static bool isInit = false;
-    if (!isInit)
-        initSdl();
-    isInit = true;
+    if (play) {
 
-    streamOpen();
+        auto thread = QThread::create([&] {
+            //            streamOpen();
+            //            init_sdl(this->window, this->renderer);
+            //            eventLoop();
+            is = stream_open(path.data(), this->window, this->renderer);
+
+            if (!is)
+                int a = 1234;
+            event_loop(is);
+        });
+        thread->start();
+
+        //        streamOpen();
+
+        //        eventLoop();
+        // open stream + init ffmpeg part
+        // event loop
+        // start this in new thread?
+
+    } else {
+        // close stream + delete ffmpeg struct's
+    }
 }
-void VideoController::setVideoParameters(WId widgetId /*const IModem::VideoData& videoData*/)
+
+void VideoController::initSDL(WId winId)
 {
-    //    this->widgetId                  = widgetId;
-    this->videoParameters->widgetId = widgetId;
-    //    this->widgetId = videoData.videoWidget->winId();
+    if (!SDL_getenv("SDL_AUDIO_ALSA_SET_BUFFER_SIZE"))
+        SDL_setenv("SDL_AUDIO_ALSA_SET_BUFFER_SIZE", "1", 1);
 
-    //    auto size = videoData.videoWidget->size();
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER))
+        throw std::runtime_error("SDL: could not init lib\n");
 
-    //    this->presentRect.h = size.height();
-    //    this->presentRect.w = size.width();
+    SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);
+    SDL_EventState(SDL_USEREVENT, SDL_IGNORE);
+
+    if (!(window = SDL_CreateWindowFrom((void*)winId)))
+        throw std::runtime_error("SDL: could not create window\n");
+
+    SDL_ShowWindow(window);
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!renderer) {
+        qDebug() << "failed initialize hardware accelerated renderer";
+        renderer = SDL_CreateRenderer(window, -1, 0);
+    }
+    if (!renderer)
+        throw std::runtime_error("SDL: could not create renderer\n");
+}
+
+void VideoController::streamOpen()
+{
+    //    this->is = stream_open(path.data(), nullptr;
+
+    //    try {
+    //        is = new VideoState;
+    //        memset((void*)is, 0, sizeof(VideoState));
+    //        if (!is)
+    //            throw std::runtime_error("streamOpen: could not create is\n");
+
+    //        is->last_video_stream = is->video_stream = -1;
+    //        is->last_audio_stream = is->audio_stream = -1;
+    //        is->last_subtitle_stream = is->subtitle_stream = -1;
+    //        is->filename                                   = path.data();
+    //        is->iformat                                    = nullptr;
+    //        is->ytop                                       = 0;
+    //        is->xleft                                      = 0;
+    //        is->audio_dev                                  = 0;
+    //        is->window                                     = this->window;
+    //        is->renderer                                   = this->renderer;
+
+    //        if (is->videoq.init() < 0)
+    //            throw std::runtime_error("ERROR: is->videoq.init");
+
+    //        if (is->audioq.init() < 0)
+    //            throw std::runtime_error("ERROR: is->audioq.init");
+
+    //        if (is->subtitleq.init() < 0)
+    //            throw std::runtime_error("ERROR: is->subtitleq.init");
+
+    //        if (is->pictq.init(&is->videoq, VIDEO_PICTURE_QUEUE_SIZE, 1) < 0)
+    //            throw std::runtime_error("ERROR: is->pictq.init");
+
+    //        if (is->subpq.init(&is->subtitleq, SUBPICTURE_QUEUE_SIZE, 0) < 0)
+    //            throw std::runtime_error("ERROR: is->subpq.init");
+
+    //        if (is->sampq.init(&is->audioq, SAMPLE_QUEUE_SIZE, 1) < 0)
+    //            throw std::runtime_error("ERROR: is->sampq.init");
+
+    //        if (!(is->continue_read_thread = SDL_CreateCond()))
+    //            throw std::runtime_error("ERROR: SDL_CreateCond continue_read_thread");
+
+    //        init_clock(&is->vidclk, is->videoq.getSerialPtr());
+    //        init_clock(&is->audclk, is->audioq.getSerialPtr());
+    //        init_clock(&is->extclk, &is->extclk.serial);
+
+    //        is->audio_clock_serial = -1;
+    //        is->audio_volume       = SDL_MIX_MAXVOLUME;
+    //        is->muted              = 0;
+    //        // TODO: here swap?
+    //        is->av_sync_type = avSyncType;
+    //        is->read_tid     = SDL_CreateThread(read_thread, "read", is);
+    //        if (!is->read_tid)
+    //            throw std::runtime_error("ERROR: SDL_CreateThread read_thread");
+
+    //    } catch (std::exception& ex) {
+    //        auto str = ex.what();
+    //        qDebug() << str;
+    //        streamClose();
+    //    } catch (...) {
+    //        auto str = "unknown error";
+    //        qDebug() << str;
+    //        streamClose();
+    //    }
+}
+
+void VideoController::streamClose()
+{
+    //    is->abort_request = 1;
+    //    SDL_WaitThread(is->read_tid, NULL);
+
+    //    /* close each stream */
+    //    if (is->audio_stream >= 0)
+    //        streamComponentClose(is->audio_stream);
+    //    if (is->video_stream >= 0)
+    //        streamComponentClose(is->video_stream);
+    //    if (is->subtitle_stream >= 0)
+    //        streamComponentClose(is->subtitle_stream);
+
+    //    avformat_close_input(&is->ic);
+
+    //    is->videoq.destroy();
+    //    is->audioq.destroy();
+    //    is->subtitleq.destroy();
+
+    //    /* free all pictures */
+    //    is->pictq.destroy();
+    //    is->sampq.destroy();
+    //    is->subpq.destroy();
+
+    //    SDL_DestroyCond(is->continue_read_thread);
+    //    sws_freeContext(is->img_convert_ctx);
+    //    sws_freeContext(is->sub_convert_ctx);
+    //    //    av_free(is->filename);
+    //    if (is->vis_texture)
+    //        SDL_DestroyTexture(is->vis_texture);
+    //    if (is->vid_texture)
+    //        SDL_DestroyTexture(is->vid_texture);
+    //    if (is->sub_texture)
+    //        SDL_DestroyTexture(is->sub_texture);
+    //    //    av_free(is);
+    //    delete is;
+}
+
+void VideoController::streamComponentClose(int idx)
+{
+    //    AVFormatContext*   ic = is->ic;
+    //    AVCodecParameters* codecpar;
+
+    //    if (idx < 0 || idx >= ic->nb_streams)
+    //        return;
+    //    codecpar = ic->streams[idx]->codecpar;
+
+    //    switch (codecpar->codec_type) {
+    //    case AVMEDIA_TYPE_AUDIO:
+    //        is->auddec.abort(&is->sampq);
+    //        SDL_CloseAudioDevice(is->audio_dev);
+    //        is->auddec.destroy();
+    //        swr_free(&is->swr_ctx);
+    //        av_freep(&is->audio_buf1);
+    //        is->audio_buf1_size = 0;
+    //        is->audio_buf       = NULL;
+
+    //        if (is->rdft) {
+    //            av_rdft_end(is->rdft);
+    //            av_freep(&is->rdft_data);
+    //            is->rdft      = NULL;
+    //            is->rdft_bits = 0;
+    //        }
+    //        break;
+    //    case AVMEDIA_TYPE_VIDEO:
+    //        is->viddec.abort(&is->pictq);
+    //        is->viddec.destroy();
+    //        break;
+    //    case AVMEDIA_TYPE_SUBTITLE:
+    //        is->subdec.abort(&is->subpq);
+    //        is->subdec.destroy();
+    //        break;
+    //    default:
+    //        break;
+    //    }
+
+    //    ic->streams[idx]->discard = AVDISCARD_ALL;
+    //    switch (codecpar->codec_type) {
+    //    case AVMEDIA_TYPE_AUDIO:
+    //        is->audio_st     = NULL;
+    //        is->audio_stream = -1;
+    //        break;
+    //    case AVMEDIA_TYPE_VIDEO:
+    //        is->video_st     = NULL;
+    //        is->video_stream = -1;
+    //        break;
+    //    case AVMEDIA_TYPE_SUBTITLE:
+    //        is->subtitle_st     = NULL;
+    //        is->subtitle_stream = -1;
+    //        break;
+    //    default:
+    //        break;
+    //    }
+}
+
+void VideoController::eventLoop()
+{
+    //    SDL_Event event;
+    //    double    incr, pos, frac;
+
+    //    for (;;) {
+    //        double x;
+    //        refresh_loop_wait_event(this->is, &event);
+    //        switch (event.type) {
+    //        case SDL_QUIT:
+    //        case FF_QUIT_EVENT:
+    //            doExit();
+    //            break;
+    //        default:
+    //            break;
+    //        }
+    //    }
+}
+
+void VideoController::doExit()
+{
+    streamClose();
+    //    if (is) {
+    //        stream_close(is);
+    //    }
+    //    if (renderer)
+    //        SDL_DestroyRenderer(renderer);
+    //    if (window)
+    //        SDL_DestroyWindow(window);
+    //    //    uninit_opts();
+    avformat_network_deinit();
+    //    if (show_status)
+    //        printf("\n");
+    //    SDL_Quit();
+    //    av_log(NULL, AV_LOG_QUIET, "%s", "");
+    //    exit(0);
 }

@@ -1,16 +1,19 @@
 SOURCES += \
-#    controllers/video/filesendercontroller.cpp \
-    $$PWD/threadsafevector.cpp \
+    $$PWD/VideoDefs.cpp \
+    $$PWD/decoder.cpp \
+    $$PWD/framequeue.cpp \
+    $$PWD/packetqueue.cpp \
     $$PWD/videocontroller.cpp \
-    $$PWD/videodecoder.cpp \
-    $$PWD/videoparameters.cpp
+    $$PWD/videohandlers.cpp
 
 HEADERS += \
-#    controllers/video/filesendercontroller.h \
-    $$PWD/threadsafevector.h \
+    $$PWD/VideoDefs.h \
+    $$PWD/VideoState.h \
+    $$PWD/decoder.h \
+    $$PWD/framequeue.h \
+    $$PWD/packetqueue.h \
     $$PWD/videocontroller.h \
-    $$PWD/videodecoder.h \
-    $$PWD/videoparameters.h
+    $$PWD/videohandlers.h
 
 INCLUDEPATH += $${_PRO_FILE_PWD_}/3rdparty/SDL/include
 DEPENDPATH  += $${_PRO_FILE_PWD_}/3rdparty/SDL/include
