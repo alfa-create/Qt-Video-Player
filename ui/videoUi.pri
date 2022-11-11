@@ -1,7 +1,5 @@
 SOURCES += \
-    $$PWD/videoui.cpp \
-    $$PWD/videowidget.cpp
+    $$PWD/videoui.cpp
 
 HEADERS += \
-    $$PWD/videoui.h \
-    $$PWD/videowidget.h
+    $$PWD/videoui.h

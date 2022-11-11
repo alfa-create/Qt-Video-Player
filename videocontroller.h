@@ -12,17 +12,13 @@
 #include <QThread>
 #include <QWidget>
 
-#include <ui/videowidget.h>
-
-void logHandle(void* userdata, int category, SDL_LogPriority priority, const char* message);
-
 class VideoController : public QObject {
     Q_OBJECT
 public:
     explicit VideoController(QObject* parent = nullptr);
     ~VideoController();
 
-    void setVideoParameters(VideoWidget* videoWidget);
+    void setVideoParameters(QWidget* videoWidget);
     void setVideoBufferSize(const uint64_t& size);
     void setPlay(bool play);
 
@@ -37,8 +33,8 @@ private:
 signals:
 
 private:
-    VideoState*  is { nullptr };
-    VideoWidget* videoWidget { nullptr };
+    VideoState* is { nullptr };
+    QWidget*    videoWidget { nullptr };
 
     QThread* videoThread { nullptr };
 

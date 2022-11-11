@@ -4,7 +4,6 @@
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
-    , packetMutex(new QMutex())
 {
     ui->setupUi(this);
 
@@ -25,18 +24,4 @@ MainWindow::MainWindow(QWidget* parent)
 MainWindow::~MainWindow()
 {
     delete ui;
-}
-
-void MainWindow::setPlay(bool play)
-{
-}
-
-void MainWindow::setVideoParameters(QWidget* videoWidget)
-{
-    videoWidget->resize(QSize(704, 576));
-    this->widgetId = videoWidget->winId();
-    auto size      = videoWidget->size();
-
-    this->presentRect.h = size.height();
-    this->presentRect.w = size.width();
 }

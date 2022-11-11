@@ -2877,6 +2877,16 @@ void event_loop(VideoState* cur_stream)
                 if (cur_stream->vis_texture) {
                     SDL_DestroyTexture(cur_stream->vis_texture);
                     cur_stream->vis_texture = NULL;
+
+                    /*
+#ifdef linux
+    int w = 0, h = 0, x = 0, y = 0;
+    SDL_GetWindowSize(window, &w, &h);
+
+                    qDebug("!x: %d, y: %d w: %d h: %d", x, y, w, h);
+                    SDL_SetWindowSize(window, set.videoWidget->width(), set.videoWidget->height());
+#endif
+                    */
                 }
 
             case SDL_WINDOWEVENT_EXPOSED:
