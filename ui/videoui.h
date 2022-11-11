@@ -15,6 +15,7 @@
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QSpacerItem>
+#include <QSpinBox>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -36,21 +37,24 @@ signals:
 
     //    void setCodec(int idx);
     void startPlay(bool start);
-    void setVideoParameters(/*const IModem::VideoData& videoData*/ QWidget* videoWidget);
+    void setVideoParameters(/*const IModem::VideoData& videoData*/ VideoWidget* videoWidget);
+    void setVideoBufferSize(const uint64_t& size);
 
 private:
     // debug widget
-    VideoWidget*  videoWidget;
-    QLineEdit*    filePathLineEdit;
-    QPushButton*  sendButton;
-    QPushButton*  openButton;
-    QPushButton*  recvButton;
-    QProgressBar* sendProgressBar;
+    VideoWidget*  videoWidget { nullptr };
+    QLineEdit*    filePathLineEdit { nullptr };
+    QPushButton*  sendButton { nullptr };
+    QPushButton*  openButton { nullptr };
+    QPushButton*  recvButton { nullptr };
+    QProgressBar* sendProgressBar { nullptr };
+
+    QSpinBox* bufferSizeSpinBox { nullptr };
 
     //    QComboBox*   codecComboBox;
-    QPushButton* playButton;
-    QPushButton* debugButton;
-    QWidget*     debugWidget;
+    QPushButton* playButton { nullptr };
+    QPushButton* debugButton { nullptr };
+    QWidget*     debugWidget { nullptr };
 
 private slots:
     void createDebugUi();

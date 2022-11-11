@@ -23,9 +23,11 @@ extern "C" {
 #include "libswresample/swresample.h"
 #include "libswscale/swscale.h"
 }
-#undef main
-#include <SDL.h>
-#undef main
+//#undef main
+//#undef SDL_MAIN_NEEDED
+//#undef SDL_MAIN_AVAILABLE
+//#include <SDL.h>
+//#undef main
 #include <QDebug>
 #include <QMutex>
 #include <QThread>

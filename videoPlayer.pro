@@ -25,3 +25,6 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 include(video.pri)
 include(ui/videoUi.pri)
+
+#win32:QMAKE_LIBS_QT_ENGTRY -= -lqtmain
+#win32-g++:DEFINES -= QT_NEEDS_QMAIN

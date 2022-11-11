@@ -17,15 +17,23 @@ MainWindow::MainWindow(QWidget* parent)
 
     //    setPlay(true);
 
+    auto groupBox = new QGroupBox(this);
+    auto layout   = new QHBoxLayout(groupBox);
+
+    auto widget = new VideoUi(groupBox);
+    layout->addWidget(widget);
+    this->setCentralWidget(groupBox);
+
     //    auto widget = new VideoUi(this);
     //    this->setCentralWidget(widget);
 
-    auto controller = new VideoController(this);
-    controller->setVideoParameters(ui->widget);
-    controller->setPlay(true);
+    auto controller = new VideoController(nullptr);
+    //    controller->setVideoParameters(ui->widget);
+    //    controller->setPlay(true);
 
-    //    connect(widget, &VideoUi::startPlay, controller, &VideoController::setPlay);
-    //    connect(widget, &VideoUi::setVideoParameters, controller, &VideoController::setVideoParameters);
+    connect(widget, &VideoUi::startPlay, controller, &VideoController::setPlay);
+    connect(widget, &VideoUi::setVideoParameters, controller, &VideoController::setVideoParameters);
+    connect(widget, &VideoUi::setVideoBufferSize, controller, &VideoController::setVideoBufferSize);
 }
 
 MainWindow::~MainWindow()

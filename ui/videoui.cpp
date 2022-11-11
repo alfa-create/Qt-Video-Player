@@ -3,11 +3,12 @@
 VideoUi::VideoUi(QWidget* parent)
     : QWidget(parent)
     //    , codecComboBox(new QComboBox(this))
+    , bufferSizeSpinBox(new QSpinBox(this))
     , playButton(new QPushButton("Старт", this))
     , debugButton(new QPushButton("Debug", this))
     , debugWidget(nullptr)
 {
-    auto tabLayout = new QVBoxLayout(this);
+    auto tabLayout = new QFormLayout(this);
 
     // ??
     //    auto codecFormLayout = new QFormLayout(nullptr);
@@ -21,10 +22,11 @@ VideoUi::VideoUi(QWidget* parent)
     videoWidget = new VideoWidget(this);
     videoWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    tabLayout->addWidget(videoWidget);
-    tabLayout->addWidget(playButton);
+    tabLayout->addRow(videoWidget);
+    tabLayout->addRow(new QLabel("Размер буффера приема (0-без лимита), КБ:", this), bufferSizeSpinBox);
+    tabLayout->addRow(playButton);
 
-    tabLayout->addWidget(debugButton);
+    tabLayout->addRow(debugButton);
 
     connect(debugButton, &QPushButton::clicked,
         this, &VideoUi::createDebugUi);
@@ -38,13 +40,20 @@ VideoUi::VideoUi(QWidget* parent)
                 playButton->setText("Старт");
                 play = false;
             }
-            emit setVideoParameters( videoWidget );
+            emit setVideoParameters(videoWidget);
             emit startPlay(play);
         });
 
     connect(videoWidget, &VideoWidget::resized, this, [&] {
-        emit setVideoParameters( videoWidget );
+        emit setVideoParameters(videoWidget);
     });
+
+    bufferSizeSpinBox->setRange(0, std::numeric_limits<int32_t>::max());
+    bufferSizeSpinBox->setValue(0);
+    connect(bufferSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+        [=](int i) {
+            emit setVideoBufferSize(i);
+        });
 }
 
 void VideoUi::setProgress(int progress)

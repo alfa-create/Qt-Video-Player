@@ -30,3 +30,4 @@ win32:LIBS += -lm -lz
 win32:LIBS +=  -L$${_PRO_FILE_PWD_}/3rdparty/FFMPEG/win32/bin -lavutil-57 -lavdevice-59 -lavfilter-8 -lavformat-59 -lswresample-4 -lswscale-6 -lavcodec-59 -lpostproc-56
 unix:LIBS += -L$${_PRO_FILE_PWD_}/3rdparty/FFMPEG/linux/lib -lavutil-56 -lavdevice-58 -lavfilter-7 -lavformat-58 -lswresample-3 -lswscale-5 -lavcodec-58
 
+

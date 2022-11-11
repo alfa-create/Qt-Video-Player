@@ -37,6 +37,8 @@ extern "C" {
 #include <libavutil/samplefmt.h>
 #include <libavutil/time.h>
 
+//#define SDL_MAIN_HANDLED
+#undef main
 #include <SDL.h>
 #undef main
 }
@@ -280,6 +282,8 @@ typedef struct VideoState {
     int last_video_stream, last_audio_stream, last_subtitle_stream;
 
     SDL_cond* continue_read_thread;
+
+    bool runEventLoop;
 } VideoState;
 
 struct VideoState;
@@ -291,5 +295,6 @@ VideoState* stream_open(const char* filename,
     SDL_Window* _window, SDL_Renderer* _renderer);
 
 void event_loop(VideoState* cur_stream);
+void do_exit(VideoState* is);
 
 #endif // VIDEOHANDLERS_H
