@@ -17,6 +17,8 @@ VideoController::~VideoController()
 
 void VideoController::setVideoParameters(VideoWidget* videoWidget)
 {
+    //    videoWidget->setUpdatesEnabled(false);
+
     // fix? ??? no 1 enter
     //    static auto winId = videoWidget->winId();
     //    if (winId != videoWidget->winId()) {
@@ -33,11 +35,11 @@ void VideoController::setVideoParameters(VideoWidget* videoWidget)
     //        initSDL(this->videoWidget->winId());
 
     // window size for rescale rectangle
-    if (this->is) {
-        this->is->height        = videoWidget->height();
-        this->is->width         = videoWidget->width();
-        this->is->force_refresh = 1;
-    }
+    //    if (this->is) {
+    //        this->is->height        = videoWidget->height();
+    //        this->is->width         = videoWidget->width();
+    //        this->is->force_refresh = 1;
+    //    }
 }
 
 void VideoController::setVideoBufferSize(const uint64_t& size)
@@ -93,12 +95,16 @@ void VideoController::initSDL(WId winId)
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
     SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
 
-    if (!(window = SDL_CreateWindowFrom((void*)winId)))
+    //    window = SDL_CreateWindow("nullptr", 0, 0, 100, 100, SDL_WINDOW_RESIZABLE);
+    window = SDL_CreateWindowFrom((void*)winId);
+    if (!(window))
         throw std::runtime_error("SDL: could not create window\n");
 
     SDL_ShowWindow(window);
 
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    //    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED); //SDL_RENDERER_ACCELERATED
+
     if (!renderer) {
         qDebug() << "failed initialize hardware accelerated renderer";
         renderer = SDL_CreateRenderer(window, -1, 0);
@@ -124,4 +130,8 @@ void VideoController::deleteStream()
     is       = nullptr;
     window   = nullptr;
     renderer = nullptr;
+}
+
+void logHandle(void* userdata, int category, SDL_LogPriority priority, const char* message)
+{
 }

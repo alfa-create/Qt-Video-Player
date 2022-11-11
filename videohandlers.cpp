@@ -1,4 +1,5 @@
 #include "videohandlers.h"
+#include "qdebug.h"
 
 //#include "cmdutils.h"
 //#include "opt_common.h"
@@ -730,8 +731,8 @@ static void video_image_display(VideoState* is)
     rect.x = 0;
     rect.y = 0;
 
-    auto ret = SDL_RenderCopy(renderer, is->vid_texture, NULL, &rect);
-    //    auto ret = SDL_RenderCopyEx(renderer, is->vid_texture, NULL, &rect, 0, NULL, SDL_RendererFlip(vp->flip_v ? SDL_FLIP_VERTICAL : 0));
+    //    auto ret = SDL_RenderCopy(renderer, is->vid_texture, NULL, &rect);
+    auto ret = SDL_RenderCopyEx(renderer, is->vid_texture, NULL, &rect, 0, NULL, SDL_RendererFlip(vp->flip_v ? SDL_FLIP_VERTICAL : 0));
     //    auto ret = SDL_RenderCopy(renderer, is->vid_texture, NULL, NULL);
     if (ret < 0) {
         auto str = SDL_GetError();
@@ -1048,15 +1049,14 @@ static void video_display(VideoState* is)
     if (!is->width)
         video_open(is);
 
-    if (!renderer)
-        return;
-
-    //    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    //    SDL_RenderClear(renderer);
     if (is->audio_st && is->show_mode != SHOW_MODE_VIDEO)
         video_audio_display(is);
     else if (is->video_st)
         video_image_display(is);
+
+    if (!SDL_RenderTargetSupported(renderer))
+        return;
+
     if (renderer)
         SDL_RenderPresent(renderer);
 }
@@ -2869,20 +2869,21 @@ void event_loop(VideoState* cur_stream)
             //                stream_seek(cur_stream, ts, 0, 0);
             //            }
             //            break;
-            //        case SDL_WINDOWEVENT:
-            //            switch (event.window.event) {
-            //            case SDL_WINDOWEVENT_SIZE_CHANGED:
-            //                //                screen_width = cur_stream->width = event.window.data1;
-            //                //                screen_height = cur_stream->height = event.window.data2;
-            //                //                if (cur_stream->vis_texture) {
-            //                //                    SDL_DestroyTexture(cur_stream->vis_texture);
-            //                //                    cur_stream->vis_texture = NULL;
-            //                //                }
-            //            case SDL_WINDOWEVENT_EXPOSED:
-            //                cur_stream->force_refresh = 1;
-            //                break;
-            //            }
-            //            break;
+        case SDL_WINDOWEVENT:
+            switch (event.window.event) {
+            case SDL_WINDOWEVENT_SIZE_CHANGED:
+                cur_stream->width  = event.window.data1;
+                cur_stream->height = event.window.data2;
+                if (cur_stream->vis_texture) {
+                    SDL_DestroyTexture(cur_stream->vis_texture);
+                    cur_stream->vis_texture = NULL;
+                }
+
+            case SDL_WINDOWEVENT_EXPOSED:
+                cur_stream->force_refresh = 1;
+                break;
+            }
+            break;
         case SDL_QUIT:
         case FF_QUIT_EVENT:
             do_exit(cur_stream);

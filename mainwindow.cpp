@@ -8,28 +8,14 @@ MainWindow::MainWindow(QWidget* parent)
 {
     ui->setupUi(this);
 
-    //    avformat_network_init();
-    //    pFormatCtx = avformat_alloc_context();
-
-    //    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER);
-
-    //    setVideoParameters(ui->widget);
-
-    //    setPlay(true);
-
     auto groupBox = new QGroupBox(this);
     auto layout   = new QHBoxLayout(groupBox);
+    auto widget   = new VideoUi(groupBox);
 
-    auto widget = new VideoUi(groupBox);
     layout->addWidget(widget);
     this->setCentralWidget(groupBox);
 
-    //    auto widget = new VideoUi(this);
-    //    this->setCentralWidget(widget);
-
     auto controller = new VideoController(nullptr);
-    //    controller->setVideoParameters(ui->widget);
-    //    controller->setPlay(true);
 
     connect(widget, &VideoUi::startPlay, controller, &VideoController::setPlay);
     connect(widget, &VideoUi::setVideoParameters, controller, &VideoController::setVideoParameters);

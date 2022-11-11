@@ -47,6 +47,8 @@ extern "C" {
 #include "SDL_video.h"
 #include "libavformat/avformat.h"
 
+#include <QMutex>
+
 #define MAX_QUEUE_SIZE            (15 * 1024 * 1024)
 #define MIN_FRAMES                25
 #define EXTERNAL_CLOCK_MIN_FRAMES 2
@@ -283,7 +285,9 @@ typedef struct VideoState {
 
     SDL_cond* continue_read_thread;
 
-    bool runEventLoop;
+    bool    runEventLoop;
+    QMutex* isLockerMutex { new QMutex };
+
 } VideoState;
 
 struct VideoState;
